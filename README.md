@@ -1,5 +1,5 @@
 # rust-shellcode-loader
-Loader written in rust that injects shellcode into a remote process through NtMapViewOfSection and NtCreateThreadEx. Uses dynamic exports through a Hells Gate crate wrapper I found from 0xflux ![here](https://github.com/0xflux/Rust-Hells-Gate). Calls ExitThread to prevent crashing if shellcode doesn't call it, but I dont think i got that part quite right. 
+Loader written in rust that injects shellcode into a remote process through NtMapViewOfSection and NtCreateThreadEx. Uses dynamic exports through a Hells Gate crate wrapper I found from 0xflux ![here](https://github.com/0xflux/Rust-Hells-Gate) and built around evading basic detections. Calls ExitThread to prevent crashing if shellcode doesn't call it, but I dont think i got that part quite right. 
 
 Anyways, works.
 
